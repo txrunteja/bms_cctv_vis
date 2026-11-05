@@ -13,51 +13,108 @@
   --pole-color: #a855f7;
 }
 
+* {
+  box-sizing: border-box;
+}
+
 body {
   background-color: var(--bg-dark);
   color: var(--text-main);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   overflow-x: hidden;
   -webkit-tap-highlight-color: transparent;
+  margin: 0;
+  padding: 0;
 }
 
 /* Custom Scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
   background: #0f172a;
 }
 ::-webkit-scrollbar-thumb {
   background: #334155;
-  border-radius: 4px;
+  border-radius: 3px;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+
+/* Hide scrollbars for horizontal chip bars */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 /* Map Canvas Container */
 .map-viewport {
   position: relative;
   overflow: hidden;
-  background: radial-gradient(circle at 50% 50%, #1e293b 0%, #0b1120 100%);
+  background: radial-gradient(circle at 50% 50%, #1e293b 0%, #080d1a 100%);
   cursor: grab;
   user-select: none;
   -webkit-user-select: none;
   touch-action: none; /* Prevents mobile browser gesture hijacking */
+  width: 100%;
+  height: 100%;
 }
 .map-viewport.grabbing {
   cursor: grabbing;
 }
 
-/* Stage container with zero transition during active dragging/zooming */
+/* Stage container: ABSOLUTE FIXED DIMENSIONS */
 #mapStage {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 768px !important;
+  height: 1024px !important;
+  min-width: 768px !important;
+  min-height: 1024px !important;
+  max-width: 768px !important;
+  max-height: 1024px !important;
   will-change: transform;
   transform-origin: 0 0;
 }
 #mapStage.smooth-transition {
-  transition: transform 0.32s cubic-bezier(0.2, 0, 0, 1);
+  transition: transform 0.28s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Blueprint Scan: CRITICAL FIX FOR TAILWIND MAX-WIDTH 100% BUG */
+#mapStage img,
+#blueprintImage {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 768px !important;
+  height: 1024px !important;
+  min-width: 768px !important;
+  min-height: 1024px !important;
+  max-width: none !important; /* OVERRIDE Tailwind preflight max-width: 100%! */
+  max-height: none !important;
+  object-fit: fill !important;
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.8);
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Layers: EXACT MATCHING DIMENSIONS */
+#cadSchematic,
+#svgCables,
+#interactiveMarkers {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 768px !important;
+  height: 1024px !important;
+  min-width: 768px !important;
+  min-height: 1024px !important;
+  max-width: 768px !important;
+  max-height: 1024px !important;
 }
 
 /* Pulsing radar effects for cameras */
@@ -81,10 +138,11 @@ body {
 
 /* Interactive Pins */
 .cam-pin {
-  transition: transform 0.15s ease-out, filter 0.15s ease;
+  transition: transform 0.12s ease-out, filter 0.12s ease;
   cursor: pointer;
+  z-index: 30;
 }
-/* Extended touch hitbox for mobile phones */
+/* Extended touch hitbox for mobile thumbs (44px) */
 .cam-pin::before, .pole-pin::before, .rack-pin::before {
   content: '';
   position: absolute;
@@ -94,14 +152,14 @@ body {
   height: 44px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  z-index: 2;
+  z-index: 5;
   cursor: pointer;
 }
 
 .cam-pin:hover, .cam-pin:active {
-  transform: scale(1.35) !important;
-  z-index: 50 !important;
-  filter: brightness(1.2) drop-shadow(0 0 12px currentColor);
+  transform: scale(1.4) !important;
+  z-index: 60 !important;
+  filter: brightness(1.25) drop-shadow(0 0 10px currentColor);
 }
 
 .cam-pin.pulse-green {
@@ -112,12 +170,6 @@ body {
 }
 .cam-pin.pulse-blue {
   animation: pulse-defect 2s infinite;
-}
-
-/* Blueprint Scan styling */
-.scan-image {
-  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7);
-  transition: opacity 0.25s ease;
 }
 
 /* Badges */
@@ -144,19 +196,20 @@ body {
 
 /* Floating on-screen map action buttons */
 .floating-btn {
-  background: rgba(15, 23, 42, 0.88);
+  background: rgba(15, 23, 42, 0.9);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(51, 65, 85, 0.8);
+  border: 1px solid rgba(51, 65, 85, 0.9);
   color: #e2e8f0;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
   transition: all 0.15s ease;
+  user-select: none;
 }
 .floating-btn:hover, .floating-btn:active {
   background: rgba(30, 41, 59, 0.98);
   color: #38bdf8;
   transform: scale(1.06);
-  border-color: rgba(56, 189, 248, 0.6);
+  border-color: rgba(56, 189, 248, 0.7);
 }
 
 /* Mobile Bottom Sheet Drawer */
@@ -167,13 +220,13 @@ body {
     left: 0;
     right: 0;
     width: 100% !important;
-    max-height: 82vh;
+    max-height: 85vh;
     border-radius: 20px 20px 0 0;
-    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.7);
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.8);
     transform: translateY(105%);
-    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-    z-index: 60;
-    padding-bottom: 24px;
+    transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 70;
+    padding-bottom: 30px;
     border-top: 1px solid rgba(255, 255, 255, 0.15);
   }
   #sidePanel.mobile-open {
@@ -182,9 +235,9 @@ body {
   #mobileDrawerBackdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(2px);
-    z-index: 55;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(3px);
+    z-index: 65;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.25s ease;
@@ -193,13 +246,21 @@ body {
     opacity: 1;
     pointer-events: auto;
   }
-  /* Bottom drawer drag handle */
   .drawer-handle {
-    width: 40px;
-    height: 4px;
-    border-radius: 2px;
-    background: #475569;
+    width: 44px;
+    height: 5px;
+    border-radius: 3px;
+    background: #64748b;
     margin: 0 auto 12px auto;
+  }
+
+  /* Full viewport map on mobile */
+  #mainWorkspace {
+    height: calc(100vh - 110px) !important;
+  }
+  #mapContainer {
+    height: 100% !important;
+    min-height: 100% !important;
   }
 }
 

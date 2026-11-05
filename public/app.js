@@ -26,7 +26,7 @@ let state = {
     scale: 0.85,
     x: 0,
     y: 0,
-    minScale: 0.35,
+    minScale: 0.2,
     maxScale: 4.5
   },
   charts: {
@@ -47,9 +47,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderRacksTab();
   initCharts();
 
+  // Recalculate center once container is rendered in layout
+  setTimeout(() => centerStage(false), 80);
+
   // Resize handler to re-center or adjust responsive layout
   window.addEventListener('resize', () => {
-    if (state.panZoom.scale === 0.85) centerStage(false);
+    centerStage(false);
   });
 });
 
@@ -373,13 +376,16 @@ function zoomAtPoint(viewportX, viewportY, factor) {
 // Center and fit stage to container
 function centerStage(smooth = true) {
   const container = document.getElementById('mapContainer');
+  if (!container) return;
   const containerW = container.clientWidth;
   const containerH = container.clientHeight;
   const stageW = 768;
   const stageH = 1024;
 
-  const scale = Math.min((containerW - 20) / stageW, (containerH - 20) / stageH, 0.95);
-  state.panZoom.scale = Math.max(scale, 0.4);
+  if (containerW <= 0 || containerH <= 0) return;
+
+  const scale = Math.min((containerW - 16) / stageW, (containerH - 16) / stageH);
+  state.panZoom.scale = Math.min(Math.max(scale, state.panZoom.minScale), 1.0);
   state.panZoom.x = (containerW - stageW * state.panZoom.scale) / 2;
   state.panZoom.y = (containerH - stageH * state.panZoom.scale) / 2;
   applyTransform(smooth);
