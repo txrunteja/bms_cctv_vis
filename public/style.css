@@ -18,12 +18,13 @@ body {
   color: var(--text-main);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Custom Scrollbars */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: #0f172a;
@@ -43,9 +44,20 @@ body {
   background: radial-gradient(circle at 50% 50%, #1e293b 0%, #0b1120 100%);
   cursor: grab;
   user-select: none;
+  -webkit-user-select: none;
+  touch-action: none; /* Prevents mobile browser gesture hijacking */
 }
 .map-viewport.grabbing {
   cursor: grabbing;
+}
+
+/* Stage container with zero transition during active dragging/zooming */
+#mapStage {
+  will-change: transform;
+  transform-origin: 0 0;
+}
+#mapStage.smooth-transition {
+  transition: transform 0.32s cubic-bezier(0.2, 0, 0, 1);
 }
 
 /* Pulsing radar effects for cameras */
@@ -67,11 +79,26 @@ body {
   100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
 }
 
+/* Interactive Pins */
 .cam-pin {
-  transition: transform 0.15s ease-out, filter 0.2s ease;
+  transition: transform 0.15s ease-out, filter 0.15s ease;
   cursor: pointer;
 }
-.cam-pin:hover {
+/* Extended touch hitbox for mobile phones */
+.cam-pin::before, .pole-pin::before, .rack-pin::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  z-index: 2;
+  cursor: pointer;
+}
+
+.cam-pin:hover, .cam-pin:active {
   transform: scale(1.35) !important;
   z-index: 50 !important;
   filter: brightness(1.2) drop-shadow(0 0 12px currentColor);
@@ -90,18 +117,10 @@ body {
 /* Blueprint Scan styling */
 .scan-image {
   box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7);
-  transition: opacity 0.3s ease;
+  transition: opacity 0.25s ease;
 }
 
-/* Glassmorphism Panels */
-.glass-panel {
-  background: rgba(30, 41, 59, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-/* Badge styles */
+/* Badges */
 .badge-working {
   background-color: rgba(16, 185, 129, 0.15);
   color: #34d399;
@@ -117,20 +136,80 @@ body {
   color: #60a5fa;
   border: 1px solid rgba(59, 130, 246, 0.3);
 }
-.badge-rack {
-  background-color: rgba(6, 182, 212, 0.15);
-  color: #22d3ee;
-  border: 1px solid rgba(6, 182, 212, 0.3);
-}
-.badge-pole {
-  background-color: rgba(168, 85, 247, 0.15);
-  color: #c084fc;
-  border: 1px solid rgba(168, 85, 247, 0.3);
-}
 
 /* Table row highlight on hover */
 .table-row-hover:hover {
   background-color: rgba(51, 65, 85, 0.5);
+}
+
+/* Floating on-screen map action buttons */
+.floating-btn {
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(51, 65, 85, 0.8);
+  color: #e2e8f0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  transition: all 0.15s ease;
+}
+.floating-btn:hover, .floating-btn:active {
+  background: rgba(30, 41, 59, 0.98);
+  color: #38bdf8;
+  transform: scale(1.06);
+  border-color: rgba(56, 189, 248, 0.6);
+}
+
+/* Mobile Bottom Sheet Drawer */
+@media (max-width: 1023px) {
+  #sidePanel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100% !important;
+    max-height: 82vh;
+    border-radius: 20px 20px 0 0;
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.7);
+    transform: translateY(105%);
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 60;
+    padding-bottom: 24px;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+  }
+  #sidePanel.mobile-open {
+    transform: translateY(0);
+  }
+  #mobileDrawerBackdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(2px);
+    z-index: 55;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+  #mobileDrawerBackdrop.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  /* Bottom drawer drag handle */
+  .drawer-handle {
+    width: 40px;
+    height: 4px;
+    border-radius: 2px;
+    background: #475569;
+    margin: 0 auto 12px auto;
+  }
+}
+
+@media (min-width: 1024px) {
+  .drawer-handle {
+    display: none;
+  }
+  #mobileDrawerBackdrop {
+    display: none !important;
+  }
 }
 
 /* Print styling */
@@ -150,4 +229,3 @@ body {
     border: 1px solid #ccc !important;
   }
 }
-

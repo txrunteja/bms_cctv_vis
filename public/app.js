@@ -26,9 +26,8 @@ let state = {
     scale: 0.85,
     x: 0,
     y: 0,
-    isDragging: false,
-    startX: 0,
-    startY: 0
+    minScale: 0.35,
+    maxScale: 4.5
   },
   charts: {
     status: null,
@@ -36,18 +35,22 @@ let state = {
   }
 };
 
-// Initialize Application
+// Application Bootstrap
 document.addEventListener('DOMContentLoaded', async () => {
-  // Lucide icons init
   if (window.lucide) lucide.createIcons();
 
   await loadAllData();
-  setupPanZoom();
+  setupPointerPanZoom();
   setupEventListeners();
   renderMap();
   renderTable();
   renderRacksTab();
   initCharts();
+
+  // Resize handler to re-center or adjust responsive layout
+  window.addEventListener('resize', () => {
+    if (state.panZoom.scale === 0.85) centerStage(false);
+  });
 });
 
 // Load Data from Node.js REST API
@@ -89,6 +92,7 @@ function updateKPIRibbon() {
 // Populate Pole Selector Dropdown
 function populatePoleDropdown() {
   const sel = document.getElementById('selectPole');
+  if (!sel) return;
   sel.innerHTML = '<option value="all">All Poles (P1 - P32)</option>';
   for (let i = 1; i <= 32; i++) {
     const poleId = `P${i}`;
@@ -107,20 +111,35 @@ function setupEventListeners() {
   document.getElementById('btnModeSchematic').addEventListener('click', () => setMode('schematic'));
   document.getElementById('btnModeSplit').addEventListener('click', () => setMode('split'));
 
+  // Mobile filters toggle
+  const btnToggleFilters = document.getElementById('btnToggleFilters');
+  if (btnToggleFilters) {
+    btnToggleFilters.addEventListener('click', () => {
+      const tb = document.getElementById('filterToolbar');
+      tb.classList.toggle('hidden');
+    });
+  }
+
   // Layer toggles
   ['chkCams', 'chkPoles', 'chkRacks', 'chkLines', 'chkCones'].forEach(id => {
-    document.getElementById(id).addEventListener('change', (e) => {
-      const key = id.replace('chk', '').toLowerCase();
-      state.layers[key] = e.target.checked;
-      renderMap();
-    });
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('change', (e) => {
+        const key = id.replace('chk', '').toLowerCase();
+        state.layers[key] = e.target.checked;
+        renderMap();
+      });
+    }
   });
 
   // Scan Opacity
-  document.getElementById('scanOpacity').addEventListener('input', (e) => {
-    const opacity = e.target.value / 100;
-    document.getElementById('blueprintImage').style.opacity = opacity;
-  });
+  const scanOpacity = document.getElementById('scanOpacity');
+  if (scanOpacity) {
+    scanOpacity.addEventListener('input', (e) => {
+      const opacity = e.target.value / 100;
+      document.getElementById('blueprintImage').style.opacity = opacity;
+    });
+  }
 
   // Search input
   const searchInput = document.getElementById('searchInput');
@@ -145,9 +164,9 @@ function setupEventListeners() {
     renderTable(q);
   });
 
-  // Zoom controls
-  document.getElementById('btnZoomIn').addEventListener('click', () => zoomBy(1.2));
-  document.getElementById('btnZoomOut').addEventListener('click', () => zoomBy(0.83));
+  // Floating Zoom controls
+  document.getElementById('btnZoomIn').addEventListener('click', () => zoomBy(1.25));
+  document.getElementById('btnZoomOut').addEventListener('click', () => zoomBy(1 / 1.25));
   document.getElementById('btnZoomReset').addEventListener('click', () => zoomPreset('all'));
 
   // Reset database button
@@ -165,9 +184,6 @@ function setupEventListeners() {
       }
     }
   });
-
-  // Print button
-  document.getElementById('btnPrintReport').addEventListener('click', () => window.print());
 }
 
 // Mode Selector Handler
@@ -180,130 +196,232 @@ function setMode(mode) {
   const cadSvg = document.getElementById('cadSchematic');
   const opacityControl = document.getElementById('opacityControl');
 
-  // Reset button styles
   [overlayBtn, schematicBtn, splitBtn].forEach(b => {
-    b.className = 'px-3 py-1.5 rounded font-medium transition-all text-slate-300 hover:text-white flex items-center space-x-1.5';
+    b.className = 'px-2.5 py-1 sm:px-3 sm:py-1.5 rounded font-medium transition-all text-slate-300 hover:text-white flex items-center space-x-1';
   });
 
   if (mode === 'overlay') {
-    overlayBtn.className = 'px-3 py-1.5 rounded font-medium transition-all bg-cyan-600 text-white shadow-sm flex items-center space-x-1.5';
+    overlayBtn.className = 'px-2.5 py-1 sm:px-3 sm:py-1.5 rounded font-medium transition-all bg-cyan-600 text-white shadow-sm flex items-center space-x-1';
     bpImg.style.display = 'block';
-    bpImg.style.opacity = document.getElementById('scanOpacity').value / 100;
+    bpImg.style.opacity = document.getElementById('scanOpacity') ? document.getElementById('scanOpacity').value / 100 : 0.85;
     cadSvg.style.display = 'none';
-    opacityControl.classList.remove('hidden');
+    if (opacityControl) opacityControl.classList.remove('hidden');
   } else if (mode === 'schematic') {
-    schematicBtn.className = 'px-3 py-1.5 rounded font-medium transition-all bg-indigo-600 text-white shadow-sm flex items-center space-x-1.5';
+    schematicBtn.className = 'px-2.5 py-1 sm:px-3 sm:py-1.5 rounded font-medium transition-all bg-indigo-600 text-white shadow-sm flex items-center space-x-1';
     bpImg.style.display = 'none';
     cadSvg.style.display = 'block';
-    opacityControl.classList.add('hidden');
+    if (opacityControl) opacityControl.classList.add('hidden');
   } else if (mode === 'split') {
-    splitBtn.className = 'px-3 py-1.5 rounded font-medium transition-all bg-emerald-600 text-white shadow-sm flex items-center space-x-1.5';
+    splitBtn.className = 'px-2.5 py-1 sm:px-3 sm:py-1.5 rounded font-medium transition-all bg-emerald-600 text-white shadow-sm flex items-center space-x-1';
     bpImg.style.display = 'block';
     bpImg.style.opacity = '0.45';
     cadSvg.style.display = 'block';
-    opacityControl.classList.remove('hidden');
+    if (opacityControl) opacityControl.classList.remove('hidden');
   }
 }
 
-// Pan & Zoom Implementation
-function setupPanZoom() {
+// =========================================================================
+// HIGH-PERFORMANCE POINTER & TOUCH PAN/ZOOM ENGINE (MOBILE & DESKTOP)
+// =========================================================================
+
+function setupPointerPanZoom() {
   const container = document.getElementById('mapContainer');
   const stage = document.getElementById('mapStage');
 
-  // Center stage initially
-  centerStage();
+  centerStage(false);
 
-  container.addEventListener('mousedown', (e) => {
-    // Don't drag if clicking interactive pin
-    if (e.target.closest('.cam-pin') || e.target.closest('.pole-pin') || e.target.closest('.rack-pin')) return;
-    state.panZoom.isDragging = true;
-    state.panZoom.startX = e.clientX - state.panZoom.x;
-    state.panZoom.startY = e.clientY - state.panZoom.y;
-    container.classList.add('grabbing');
-  });
+  // Active pointer tracking map: pointerId -> { x, y }
+  const activePointers = new Map();
+  let isDragging = false;
+  let lastPos = { x: 0, y: 0 };
+  let initialPinchDist = 0;
+  let initialScale = 1;
+  let pinchAnchor = { x: 0, y: 0 };
+  let lastTapTime = 0;
 
-  window.addEventListener('mousemove', (e) => {
-    if (!state.panZoom.isDragging) return;
-    state.panZoom.x = e.clientX - state.panZoom.startX;
-    state.panZoom.y = e.clientY - state.panZoom.startY;
-    applyTransform();
-  });
+  // Pointer Down: handles Mouse, Touch, and Stylus
+  container.addEventListener('pointerdown', (e) => {
+    // If clicking directly on a camera pin, pole pin, rack pin, or button, let that event trigger
+    if (e.target.closest('.cam-pin, .pole-pin, .rack-pin, button, select, input, .floating-btn')) {
+      return;
+    }
 
-  window.addEventListener('mouseup', () => {
-    if (state.panZoom.isDragging) {
-      state.panZoom.isDragging = false;
-      container.classList.remove('grabbing');
+    try {
+      container.setPointerCapture(e.pointerId);
+    } catch (err) {}
+
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    stage.classList.remove('smooth-transition');
+
+    if (activePointers.size === 1) {
+      isDragging = true;
+      lastPos = { x: e.clientX, y: e.clientY };
+      container.classList.add('grabbing');
+
+      // Double-tap zoom detection
+      const now = Date.now();
+      if (now - lastTapTime < 300) {
+        const rect = container.getBoundingClientRect();
+        const tapX = e.clientX - rect.left;
+        const tapY = e.clientY - rect.top;
+        zoomAtPoint(tapX, tapY, 1.6);
+        lastTapTime = 0;
+        return;
+      }
+      lastTapTime = now;
+
+    } else if (activePointers.size === 2) {
+      // 2-finger Pinch-to-Zoom initiated
+      isDragging = false;
+      const pts = Array.from(activePointers.values());
+      initialPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      initialScale = state.panZoom.scale;
+
+      const rect = container.getBoundingClientRect();
+      pinchAnchor = {
+        x: (pts[0].x + pts[1].x) / 2 - rect.left,
+        y: (pts[0].y + pts[1].y) / 2 - rect.top,
+        panX: state.panZoom.x,
+        panY: state.panZoom.y
+      };
     }
   });
 
-  // Wheel zoom centered on cursor
+  // Pointer Move
+  container.addEventListener('pointermove', (e) => {
+    if (!activePointers.has(e.pointerId)) return;
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activePointers.size === 1 && isDragging) {
+      const dx = e.clientX - lastPos.x;
+      const dy = e.clientY - lastPos.y;
+      lastPos = { x: e.clientX, y: e.clientY };
+
+      state.panZoom.x += dx;
+      state.panZoom.y += dy;
+      applyTransform(false);
+
+    } else if (activePointers.size === 2) {
+      const pts = Array.from(activePointers.values());
+      const currentDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+
+      if (initialPinchDist > 5 && currentDist > 5) {
+        const pinchRatio = currentDist / initialPinchDist;
+        const targetScale = Math.min(Math.max(initialScale * pinchRatio, state.panZoom.minScale), state.panZoom.maxScale);
+
+        const rect = container.getBoundingClientRect();
+        const currentMid = {
+          x: (pts[0].x + pts[1].x) / 2 - rect.left,
+          y: (pts[0].y + pts[1].y) / 2 - rect.top
+        };
+
+        // Smooth zoom relative to pinch midpoint
+        state.panZoom.x = currentMid.x - (pinchAnchor.x - pinchAnchor.panX) * (targetScale / initialScale);
+        state.panZoom.y = currentMid.y - (pinchAnchor.y - pinchAnchor.panY) * (targetScale / initialScale);
+        state.panZoom.scale = targetScale;
+        applyTransform(false);
+      }
+    }
+  });
+
+  // Pointer End / Cancel
+  const handlePointerEnd = (e) => {
+    activePointers.delete(e.pointerId);
+    try {
+      container.releasePointerCapture(e.pointerId);
+    } catch (err) {}
+
+    if (activePointers.size === 0) {
+      isDragging = false;
+      container.classList.remove('grabbing');
+    } else if (activePointers.size === 1) {
+      const remaining = Array.from(activePointers.values())[0];
+      lastPos = { x: remaining.x, y: remaining.y };
+      isDragging = true;
+    }
+  };
+
+  container.addEventListener('pointerup', handlePointerEnd);
+  container.addEventListener('pointercancel', handlePointerEnd);
+  container.addEventListener('pointerleave', handlePointerEnd);
+
+  // Mouse Wheel Zoom (Symmetric & Anchored at Cursor)
   container.addEventListener('wheel', (e) => {
     e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
+    const zoomFactor = e.deltaY < 0 ? 1.18 : (1 / 1.18);
     const rect = container.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+    const cursorX = e.clientX - rect.left;
+    const cursorY = e.clientY - rect.top;
 
-    const newScale = Math.min(Math.max(state.panZoom.scale * zoomFactor, 0.4), 3.5);
-    
-    // Zoom toward mouse pointer
-    state.panZoom.x = mouseX - (mouseX - state.panZoom.x) * (newScale / state.panZoom.scale);
-    state.panZoom.y = mouseY - (mouseY - state.panZoom.y) * (newScale / state.panZoom.scale);
-    state.panZoom.scale = newScale;
-
-    applyTransform();
+    zoomAtPoint(cursorX, cursorY, zoomFactor);
   }, { passive: false });
 }
 
-function centerStage() {
+// Zoom centered on a specific viewport coordinate (px, py)
+function zoomAtPoint(viewportX, viewportY, factor) {
+  const currentScale = state.panZoom.scale;
+  const newScale = Math.min(Math.max(currentScale * factor, state.panZoom.minScale), state.panZoom.maxScale);
+
+  // Adjust translation so the point under cursor/touch stays in place
+  state.panZoom.x = viewportX - (viewportX - state.panZoom.x) * (newScale / currentScale);
+  state.panZoom.y = viewportY - (viewportY - state.panZoom.y) * (newScale / currentScale);
+  state.panZoom.scale = newScale;
+
+  applyTransform(false);
+}
+
+// Center and fit stage to container
+function centerStage(smooth = true) {
   const container = document.getElementById('mapContainer');
   const containerW = container.clientWidth;
   const containerH = container.clientHeight;
   const stageW = 768;
   const stageH = 1024;
 
-  const scale = Math.min((containerW - 40) / stageW, (containerH - 40) / stageH, 0.95);
-  state.panZoom.scale = scale;
-  state.panZoom.x = (containerW - stageW * scale) / 2;
-  state.panZoom.y = (containerH - stageH * scale) / 2;
-  applyTransform();
+  const scale = Math.min((containerW - 20) / stageW, (containerH - 20) / stageH, 0.95);
+  state.panZoom.scale = Math.max(scale, 0.4);
+  state.panZoom.x = (containerW - stageW * state.panZoom.scale) / 2;
+  state.panZoom.y = (containerH - stageH * state.panZoom.scale) / 2;
+  applyTransform(smooth);
 }
 
-function applyTransform() {
+// Apply 3D GPU Accelerated Transform
+function applyTransform(smooth = false) {
   const stage = document.getElementById('mapStage');
-  stage.style.transform = `translate(${state.panZoom.x}px, ${state.panZoom.y}px) scale(${state.panZoom.scale})`;
-  document.getElementById('zoomIndicator').textContent = `Zoom: ${Math.round(state.panZoom.scale * 100)}%`;
+  if (!stage) return;
+
+  if (smooth) {
+    stage.classList.add('smooth-transition');
+  } else {
+    stage.classList.remove('smooth-transition');
+  }
+
+  stage.style.transform = `translate3d(${state.panZoom.x.toFixed(1)}px, ${state.panZoom.y.toFixed(1)}px, 0) scale(${state.panZoom.scale.toFixed(3)})`;
+  
+  const indicator = document.getElementById('zoomIndicator');
+  if (indicator) {
+    indicator.textContent = `${Math.round(state.panZoom.scale * 100)}%`;
+  }
 }
 
+// Zoom by factor from screen center
 function zoomBy(factor) {
   const container = document.getElementById('mapContainer');
-  const centerX = container.clientWidth / 2;
-  const centerY = container.clientHeight / 2;
-  const newScale = Math.min(Math.max(state.panZoom.scale * factor, 0.4), 3.5);
-
-  state.panZoom.x = centerX - (centerX - state.panZoom.x) * (newScale / state.panZoom.scale);
-  state.panZoom.y = centerY - (centerY - state.panZoom.y) * (newScale / state.panZoom.scale);
-  state.panZoom.scale = newScale;
-  applyTransform();
+  const cx = container.clientWidth / 2;
+  const cy = container.clientHeight / 2;
+  zoomAtPoint(cx, cy, factor);
 }
 
 // Preset Camera Zooms
 function zoomPreset(preset) {
-  const container = document.getElementById('mapContainer');
-  const w = container.clientWidth;
-  const h = container.clientHeight;
-
   if (preset === 'all') {
-    centerStage();
+    centerStage(true);
   } else if (preset === 'mainGate') {
-    // Target (580, 800)
-    focusPoint(580, 800, 1.6);
+    focusPoint(580, 800, 1.5);
   } else if (preset === 'rearGate') {
-    // Target (150, 150)
-    focusPoint(150, 150, 1.6);
+    focusPoint(150, 150, 1.5);
   } else if (preset === 'courtyard') {
-    // Target (450, 450)
-    focusPoint(450, 450, 1.6);
+    focusPoint(450, 450, 1.5);
   }
 }
 
@@ -314,10 +432,13 @@ function focusPoint(px, py, targetScale) {
   state.panZoom.scale = targetScale;
   state.panZoom.x = cx - px * targetScale;
   state.panZoom.y = cy - py * targetScale;
-  applyTransform();
+  applyTransform(true);
 }
 
-// Filter Handling
+// =========================================================================
+// FILTERS & SELECTION LOGIC
+// =========================================================================
+
 function setFilter(type, value) {
   state.filters[type] = value;
   
@@ -325,9 +446,9 @@ function setFilter(type, value) {
     document.querySelectorAll('.status-btn').forEach(btn => {
       const s = btn.getAttribute('data-status');
       if (s === value) {
-        btn.className = 'status-btn px-2.5 py-1 rounded font-medium transition-all bg-slate-700 text-white';
+        btn.className = 'status-btn px-2 sm:px-2.5 py-1 rounded font-medium transition-all bg-slate-700 text-white';
       } else {
-        btn.className = `status-btn px-2.5 py-1 rounded font-medium transition-all ${
+        btn.className = `status-btn px-2 sm:px-2.5 py-1 rounded font-medium transition-all ${
           s === 'Working' ? 'text-emerald-400' : s === 'Cable issue' ? 'text-rose-400' : s === 'Defective' ? 'text-blue-400' : 'text-slate-400'
         } hover:bg-slate-700/60`;
       }
@@ -342,7 +463,6 @@ function quickFilterStatus(status) {
   setFilter('status', status);
 }
 
-// Match camera against active filters
 function matchesFilter(cam) {
   const f = state.filters;
   if (f.status !== 'all' && cam.status.toLowerCase() !== f.status.toLowerCase()) return false;
@@ -367,6 +487,8 @@ function matchesFilter(cam) {
 function renderMap() {
   const markersContainer = document.getElementById('interactiveMarkers');
   const svgCables = document.getElementById('svgCables');
+  if (!markersContainer || !svgCables) return;
+
   markersContainer.innerHTML = '';
   svgCables.innerHTML = '';
 
@@ -375,17 +497,12 @@ function renderMap() {
   // 1. Render Cable Connections (SVG lines)
   if (layers.lines) {
     cameras.forEach(cam => {
-      const visible = matchesFilter(cam);
-      if (!visible) return;
+      if (!matchesFilter(cam)) return;
 
-      // Find pole and rack coords
-      const pole = poles[cam.pole];
       const rack = racks[cam.rack];
-
       const isHighlight = (selectedCameraId === cam.id) || 
                           (selectedDeviceId && (selectedDeviceId === cam.pole || selectedDeviceId === cam.rack));
 
-      // Draw line from Rack to Camera (via pole)
       if (rack && isHighlight) {
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         line.setAttribute('x1', rack.x);
@@ -393,9 +510,9 @@ function renderMap() {
         line.setAttribute('x2', cam.x);
         line.setAttribute('y2', cam.y);
         line.setAttribute('stroke', cam.status === 'Working' ? '#10b981' : cam.status === 'Cable issue' ? '#ef4444' : '#3b82f6');
-        line.setAttribute('stroke-width', '2');
-        line.setAttribute('stroke-dasharray', cam.status === 'Cable issue' ? '4 2' : 'none');
-        line.setAttribute('opacity', '0.8');
+        line.setAttribute('stroke-width', '2.5');
+        line.setAttribute('stroke-dasharray', cam.status === 'Cable issue' ? '5 3' : 'none');
+        line.setAttribute('opacity', '0.85');
         svgCables.appendChild(line);
       }
     });
@@ -416,7 +533,7 @@ function renderMap() {
       const badgeBg = isOuter ? 'bg-cyan-900/90 text-cyan-300 border-cyan-400' : 'bg-amber-900/90 text-amber-300 border-amber-400';
 
       rackEl.innerHTML = `
-        <div class="flex items-center space-x-1 px-1.5 py-0.5 rounded shadow-lg border ${badgeBg} backdrop-blur-sm">
+        <div class="flex items-center space-x-1 px-1.5 py-0.5 rounded shadow-lg border ${badgeBg} backdrop-blur-sm pointer-events-none">
           <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M4 4h16v4H4V4zm0 6h16v4H4v-4zm0 6h16v4H4v-4z"/></svg>
           <span class="text-[10px] font-extrabold tracking-tight">${rackId}</span>
         </div>
@@ -443,7 +560,7 @@ function renderMap() {
       poleEl.style.top = `${p.y}px`;
 
       poleEl.innerHTML = `
-        <div class="w-6 h-6 rounded-md bg-purple-950/90 border border-purple-400 text-purple-200 flex items-center justify-center text-[10px] font-bold shadow-lg backdrop-blur-sm">
+        <div class="w-6 h-6 rounded-md bg-purple-950/90 border border-purple-400 text-purple-200 flex items-center justify-center text-[10px] font-bold shadow-lg backdrop-blur-sm pointer-events-none">
           ${poleId.replace('P', '')}
         </div>
       `;
@@ -460,12 +577,10 @@ function renderMap() {
   // 4. Render Cameras
   if (layers.cameras) {
     cameras.forEach(cam => {
-      const isVisible = matchesFilter(cam);
-      if (!isVisible) return;
+      if (!matchesFilter(cam)) return;
 
       const isSelected = selectedCameraId === cam.id;
 
-      // Status color mapping
       let colorClass = 'bg-emerald-500 border-emerald-300 text-slate-950 pulse-green';
       let haloColor = 'rgba(16, 185, 129, 0.4)';
       if (cam.status === 'Cable issue') {
@@ -476,7 +591,6 @@ function renderMap() {
         haloColor = 'rgba(59, 130, 246, 0.5)';
       }
 
-      // Camera node wrapper
       const camEl = document.createElement('div');
       camEl.className = `cam-pin absolute transform -translate-x-1/2 -translate-y-1/2 z-30 ${
         isSelected ? 'scale-150 z-50 ring-4 ring-white' : ''
@@ -484,7 +598,6 @@ function renderMap() {
       camEl.style.left = `${cam.x}px`;
       camEl.style.top = `${cam.y}px`;
 
-      // Optional FOV Cone SVG
       let coneSvg = '';
       if (layers.cones) {
         const rad = (cam.angle * Math.PI) / 180;
@@ -500,7 +613,7 @@ function renderMap() {
 
       camEl.innerHTML = `
         ${coneSvg}
-        <div class="relative w-5 h-5 rounded-full ${colorClass} border-2 flex items-center justify-center text-[9px] font-black shadow-md select-none" title="Cam ${cam.id} (${cam.status}) - ${cam.pole}">
+        <div class="relative w-5 h-5 rounded-full ${colorClass} border-2 flex items-center justify-center text-[9px] font-black shadow-md select-none pointer-events-none" title="Cam ${cam.id} (${cam.status})">
           ${cam.id}
         </div>
       `;
@@ -523,46 +636,43 @@ function selectCamera(id) {
   const cam = state.cameras.find(c => c.id === id);
   if (!cam) return;
 
-  // Render map highlights
   renderMap();
-
-  // Focus slightly on the camera
   focusPoint(cam.x, cam.y, Math.max(state.panZoom.scale, 1.4));
 
-  // Populate Side Panel
+  // Open side panel / mobile bottom sheet
+  const sidePanel = document.getElementById('sidePanel');
+  const backdrop = document.getElementById('mobileDrawerBackdrop');
+  if (sidePanel) sidePanel.classList.add('mobile-open');
+  if (backdrop) backdrop.classList.add('visible');
+
   document.getElementById('panelEmpty').classList.add('hidden');
   document.getElementById('panelDevice').classList.add('hidden');
   const pnl = document.getElementById('panelCamera');
   pnl.classList.remove('hidden');
 
-  // Title & Basic Info
   document.getElementById('camCardTitle').textContent = `${cam.camCode} (#${cam.id})`;
   document.getElementById('camCardZone').textContent = cam.zone;
   document.getElementById('camCardLocation').textContent = cam.locationDesc;
 
-  // Status Badge
   const badge = document.getElementById('camCardBadge');
   badge.textContent = cam.status;
   if (cam.status === 'Working') {
-    badge.className = 'px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider badge-working';
+    badge.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider badge-working';
   } else if (cam.status === 'Cable issue') {
-    badge.className = 'px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider badge-cable';
+    badge.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider badge-cable';
   } else {
-    badge.className = 'px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider badge-defect';
+    badge.className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider badge-defect';
   }
 
-  // Handwritten Crop Image Snippet
   const cropImg = document.getElementById('camCropImg');
   cropImg.src = cam.cropUrl;
-  document.getElementById('camCropCoords').textContent = `Map Coords: X=${cam.x}px, Y=${cam.y}px (${cam.xPct}%, ${cam.yPct}%)`;
+  document.getElementById('camCropCoords').textContent = `X=${cam.x}px, Y=${cam.y}px (${cam.xPct}%, ${cam.yPct}%)`;
 
-  // Specs
   document.getElementById('camCardPole').textContent = cam.pole;
   document.getElementById('camCardRack').textContent = cam.rack;
   document.getElementById('camCardIP').textContent = cam.ipAddress;
   document.getElementById('camCardFOV').textContent = `${cam.angle}° (${getCompassDirection(cam.angle)})`;
 
-  // Fault & Action
   document.getElementById('camCardFault').textContent = cam.fault || 'None reported';
   document.getElementById('camCardAction').textContent = cam.action || 'Routine inspection';
   document.getElementById('camCardNotes').value = cam.notes || '';
@@ -595,7 +705,6 @@ async function updateCameraStatus(newStatus) {
 
     if (res.ok) {
       const data = await res.json();
-      // Update local state
       const idx = state.cameras.findIndex(c => c.id === id);
       if (idx !== -1) {
         state.cameras[idx] = data.camera;
@@ -648,13 +757,18 @@ function selectPole(poleId) {
   renderMap();
   focusPoint(pole.x, pole.y, 1.4);
 
+  const sidePanel = document.getElementById('sidePanel');
+  const backdrop = document.getElementById('mobileDrawerBackdrop');
+  if (sidePanel) sidePanel.classList.add('mobile-open');
+  if (backdrop) backdrop.classList.add('visible');
+
   document.getElementById('panelEmpty').classList.add('hidden');
   document.getElementById('panelCamera').classList.add('hidden');
   const pnl = document.getElementById('panelDevice');
   pnl.classList.remove('hidden');
 
   document.getElementById('devCardType').textContent = 'Support Pole';
-  document.getElementById('devCardType').className = 'px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/30';
+  document.getElementById('devCardType').className = 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/30';
   document.getElementById('devCardTitle').textContent = `Pole ${poleId}`;
   document.getElementById('devCardDesc').textContent = pole.desc;
 
@@ -679,6 +793,11 @@ function selectRack(rackId) {
   renderMap();
   focusPoint(rack.x, rack.y, 1.4);
 
+  const sidePanel = document.getElementById('sidePanel');
+  const backdrop = document.getElementById('mobileDrawerBackdrop');
+  if (sidePanel) sidePanel.classList.add('mobile-open');
+  if (backdrop) backdrop.classList.add('visible');
+
   document.getElementById('panelEmpty').classList.add('hidden');
   document.getElementById('panelCamera').classList.add('hidden');
   const pnl = document.getElementById('panelDevice');
@@ -687,8 +806,8 @@ function selectRack(rackId) {
   const isOuter = rackId.startsWith('OR');
   document.getElementById('devCardType').textContent = isOuter ? 'Outer Ring Rack (OR)' : 'Inner Ring Rack (IR)';
   document.getElementById('devCardType').className = isOuter 
-    ? 'px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-    : 'px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30';
+    ? 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+    : 'px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30';
 
   document.getElementById('devCardTitle').textContent = `Rack ${rackId}`;
   document.getElementById('devCardDesc').textContent = rack.desc;
@@ -739,6 +858,11 @@ function renderDeviceCameras(cams) {
 function closeInspector() {
   state.selectedCameraId = null;
   state.selectedDeviceId = null;
+  const sidePanel = document.getElementById('sidePanel');
+  const backdrop = document.getElementById('mobileDrawerBackdrop');
+  if (sidePanel) sidePanel.classList.remove('mobile-open');
+  if (backdrop) backdrop.classList.remove('visible');
+
   document.getElementById('panelCamera').classList.add('hidden');
   document.getElementById('panelDevice').classList.add('hidden');
   document.getElementById('panelEmpty').classList.remove('hidden');
@@ -758,6 +882,7 @@ function highlightCurrentRack() {
 // Render Asset Register Table
 function renderTable(filterQuery = '') {
   const tbody = document.getElementById('assetTableBody');
+  if (!tbody) return;
   tbody.innerHTML = '';
 
   let list = state.cameras.filter(c => matchesFilter(c));
@@ -783,22 +908,22 @@ function renderTable(filterQuery = '') {
     else if (c.status === 'Defective') badgeClass = 'badge-defect';
 
     tr.innerHTML = `
-      <td class="p-3 font-mono font-bold text-white">${c.id}</td>
-      <td class="p-3 font-semibold text-slate-200">${c.camCode}</td>
-      <td class="p-3">
-        <span class="px-2 py-0.5 rounded text-[11px] font-semibold ${badgeClass}">
+      <td class="p-2.5 sm:p-3 font-mono font-bold text-white">${c.id}</td>
+      <td class="p-2.5 sm:p-3 font-semibold text-slate-200">${c.camCode}</td>
+      <td class="p-2.5 sm:p-3">
+        <span class="px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-semibold ${badgeClass}">
           ${c.status}
         </span>
       </td>
-      <td class="p-3 font-medium text-purple-300">${c.pole}</td>
-      <td class="p-3 font-medium text-cyan-300">${c.rack}</td>
-      <td class="p-3 text-slate-400">${c.zone}</td>
-      <td class="p-3 text-slate-300 max-w-[200px] truncate" title="${c.locationDesc}">${c.locationDesc}</td>
-      <td class="p-3 font-mono text-slate-400">${c.ipAddress}</td>
-      <td class="p-3 text-rose-300/90 max-w-[180px] truncate" title="${c.fault || ''}">${c.fault || '—'}</td>
-      <td class="p-3 text-amber-200/90 max-w-[220px] truncate" title="${c.action || ''}">${c.action || '—'}</td>
-      <td class="p-3 text-right">
-        <button class="px-2.5 py-1 rounded bg-slate-800 hover:bg-cyan-600 text-slate-200 hover:text-white transition-colors text-xs font-semibold" onclick="selectCamera(${c.id})">
+      <td class="p-2.5 sm:p-3 font-medium text-purple-300">${c.pole}</td>
+      <td class="p-2.5 sm:p-3 font-medium text-cyan-300">${c.rack}</td>
+      <td class="p-2.5 sm:p-3 text-slate-400">${c.zone}</td>
+      <td class="p-2.5 sm:p-3 text-slate-300 max-w-[180px] truncate" title="${c.locationDesc}">${c.locationDesc}</td>
+      <td class="p-2.5 sm:p-3 font-mono text-slate-400">${c.ipAddress}</td>
+      <td class="p-2.5 sm:p-3 text-rose-300/90 max-w-[160px] truncate" title="${c.fault || ''}">${c.fault || '—'}</td>
+      <td class="p-2.5 sm:p-3 text-amber-200/90 max-w-[180px] truncate" title="${c.action || ''}">${c.action || '—'}</td>
+      <td class="p-2.5 sm:p-3 text-right">
+        <button class="px-2.5 py-1 rounded bg-slate-800 hover:bg-cyan-600 text-slate-200 hover:text-white transition-colors text-xs font-semibold" onclick="selectCamera(${c.id}); window.scrollTo({ top: 0, behavior: 'smooth' });">
           Inspect
         </button>
       </td>
@@ -810,6 +935,7 @@ function renderTable(filterQuery = '') {
 // Render Network Racks Tab
 function renderRacksTab() {
   const container = document.getElementById('racksGrid');
+  if (!container) return;
   container.innerHTML = '';
 
   Object.entries(state.racks).forEach(([rackId, r]) => {
@@ -818,10 +944,11 @@ function renderRacksTab() {
     const tagBg = isOuter ? 'bg-cyan-500/15 text-cyan-300' : 'bg-amber-500/15 text-amber-300';
 
     const card = document.createElement('div');
-    card.className = `bg-slate-800/60 rounded-xl p-4 border ${borderClass} transition-all shadow cursor-pointer space-y-3`;
+    card.className = `bg-slate-800/60 rounded-xl p-3.5 sm:p-4 border ${borderClass} transition-all shadow cursor-pointer space-y-2.5`;
     card.onclick = () => {
       switchTab('register');
       selectRack(rackId);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const healthPct = r.cameraCount > 0 ? Math.round((r.workingCount / r.cameraCount) * 100) : 100;
@@ -830,15 +957,15 @@ function renderRacksTab() {
       <div class="flex items-start justify-between">
         <div>
           <span class="px-2 py-0.5 rounded text-[10px] font-bold tracking-wide uppercase ${tagBg}">${isOuter ? 'Outer Ring' : 'Inner Ring'}</span>
-          <h4 class="text-base font-bold text-white mt-1">${rackId} Hub</h4>
+          <h4 class="text-sm sm:text-base font-bold text-white mt-1">${rackId} Hub</h4>
         </div>
         <div class="text-right">
-          <span class="text-lg font-black ${healthPct === 100 ? 'text-emerald-400' : healthPct > 50 ? 'text-amber-400' : 'text-rose-400'}">${healthPct}%</span>
-          <span class="text-[10px] text-slate-400 block">Health</span>
+          <span class="text-base sm:text-lg font-black ${healthPct === 100 ? 'text-emerald-400' : healthPct > 50 ? 'text-amber-400' : 'text-rose-400'}">${healthPct}%</span>
+          <span class="text-[9px] text-slate-400 block">Health</span>
         </div>
       </div>
-      <p class="text-xs text-slate-400">${r.desc}</p>
-      <div class="space-y-1.5 text-xs pt-1 border-t border-slate-700/60">
+      <p class="text-xs text-slate-400 line-clamp-2">${r.desc}</p>
+      <div class="space-y-1 text-xs pt-1 border-t border-slate-700/60">
         <div class="flex justify-between text-slate-400">
           <span>Connected Cameras:</span>
           <span class="font-bold text-white">${r.cameraCount}</span>
@@ -849,10 +976,9 @@ function renderRacksTab() {
         </div>
         <div class="flex justify-between text-slate-400">
           <span>Switch Spec:</span>
-          <span class="text-slate-300 text-[11px] truncate max-w-[150px]">${r.switch}</span>
+          <span class="text-slate-300 text-[10px] sm:text-[11px] truncate max-w-[140px]">${r.switch}</span>
         </div>
       </div>
-      <!-- Progress Bar -->
       <div class="w-full bg-slate-700/60 h-2 rounded-full overflow-hidden">
         <div class="bg-emerald-500 h-full" style="width: ${healthPct}%;"></div>
       </div>
@@ -862,19 +988,15 @@ function renderRacksTab() {
   });
 }
 
-// Chart.js Analytics Initialization
+// Chart.js Analytics
 function initCharts() {
-  if (typeof Chart === 'undefined') {
-    console.warn('Chart.js not loaded, skipping chart rendering');
-    return;
-  }
+  if (typeof Chart === 'undefined') return;
   const ctxStatus = document.getElementById('chartStatus');
   const ctxRacks = document.getElementById('chartRacks');
   if (!ctxStatus || !ctxRacks) return;
 
   const { working, cableIssue, defective } = state.summary;
 
-  // Status Donut Chart
   state.charts.status = new Chart(ctxStatus, {
     type: 'doughnut',
     data: {
@@ -899,7 +1021,6 @@ function initCharts() {
     }
   });
 
-  // Racks Bar Chart
   const rackLabels = Object.keys(state.racks);
   const rackWorking = rackLabels.map(r => state.racks[r].workingCount);
   const rackIssues = rackLabels.map(r => state.racks[r].issueCount);
@@ -909,38 +1030,19 @@ function initCharts() {
     data: {
       labels: rackLabels,
       datasets: [
-        {
-          label: 'Working Cams',
-          data: rackWorking,
-          backgroundColor: '#10b981'
-        },
-        {
-          label: 'Fault / Issue Cams',
-          data: rackIssues,
-          backgroundColor: '#ef4444'
-        }
+        { label: 'Working Cams', data: rackWorking, backgroundColor: '#10b981' },
+        { label: 'Fault Cams', data: rackIssues, backgroundColor: '#ef4444' }
       ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       scales: {
-        x: {
-          stacked: true,
-          ticks: { color: '#94a3b8' },
-          grid: { color: '#334155' }
-        },
-        y: {
-          stacked: true,
-          ticks: { color: '#94a3b8', stepSize: 1 },
-          grid: { color: '#334155' }
-        }
+        x: { stacked: true, ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+        y: { stacked: true, ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: '#334155' } }
       },
       plugins: {
-        legend: {
-          position: 'top',
-          labels: { color: '#94a3b8', font: { size: 11 } }
-        }
+        legend: { position: 'top', labels: { color: '#94a3b8', font: { size: 11 } } }
       }
     }
   });
@@ -969,10 +1071,10 @@ function switchTab(tabName) {
     const btn = document.getElementById(`tabBtn${t.charAt(0).toUpperCase() + t.slice(1)}`);
     const content = document.getElementById(`tabContent${t.charAt(0).toUpperCase() + t.slice(1)}`);
     if (t === tabName) {
-      btn.className = 'tab-btn px-4 py-2.5 font-semibold border-b-2 border-cyan-500 text-cyan-400 flex items-center space-x-2';
+      btn.className = 'tab-btn px-3.5 py-2 font-semibold border-b-2 border-cyan-500 text-cyan-400 flex items-center space-x-1.5 whitespace-nowrap';
       content.classList.remove('hidden');
     } else {
-      btn.className = 'tab-btn px-4 py-2.5 font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center space-x-2';
+      btn.className = 'tab-btn px-3.5 py-2 font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center space-x-1.5 whitespace-nowrap';
       content.classList.add('hidden');
     }
   });
