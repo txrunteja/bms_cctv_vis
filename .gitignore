@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Temp analysis files
+*.tmp
+cam14.png
+cam36.png
+cam36_wide.png
+cam57.png
+legend_crop.png
+or7_crop.png
+p4_crop.png
+p8_crop.png
+pickup_crop.png
+
